@@ -6,7 +6,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 function getDbUrl() {
-  return (process.env.DATABASE_URL || "").trim().replace(/^["']|["']$/g, '');
+  const raw = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL || "";
+  return raw.trim().replace(/^["']|["']$/g, '');
 }
 
 function getNeonClient() {
