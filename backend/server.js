@@ -38,6 +38,22 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", message: "ContentForge AI Backend is running!" });
 });
 
+app.get("/api/health-db", async (req, res) => {
+  const dbUrl = (process.env.NEON_DATABASE_URL || process.env.DATABASE_URL || "").trim().replace(/^["']|["']$/g, '');
+  const masked = dbUrl.replace(/:([^:@]+)@/, (m, p) => `:${p.slice(0, 5)}...${p.slice(-3)}@`);
+  if (!dbUrl) {
+    return res.status(500).json({ status: "error", message: "No DATABASE_URL or NEON_DATABASE_URL set in environment" });
+  }
+  try {
+    const { neon } = await import("@neondatabase/serverless");
+    const client = neon(dbUrl);
+    const result = await client`SELECT 1 as connected, current_database() as db, current_user as user`;
+    return res.json({ status: "connected", maskedUrl: masked, result });
+  } catch (err) {
+    return res.status(500).json({ status: "failed", maskedUrl: masked, error: err.message });
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes) ;
 app.use("/api/user", userRoutes) ;
