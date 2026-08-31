@@ -9,7 +9,8 @@ const Hero = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        axios.get("http://localhost:3000/api/auth/check-auth", { withCredentials: true })
+        const baseURL = import.meta.env.VITE_BASE_URL || "http://localhost:3000";
+        axios.get(`${baseURL}/api/auth/check-auth`, { withCredentials: true })
             .then(res => {
                 setIsLoggedIn(res.data.loggedIn);
                 setLoading(false);
