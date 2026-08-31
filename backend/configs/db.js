@@ -5,19 +5,24 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-let neonClient = null;
-let localDb = null;
-let useLocal = false;
-
-if (process.env.DATABASE_URL && !process.env.FORCE_LOCAL_DB) {
-  try {
-    neonClient = neon(process.env.DATABASE_URL);
-  } catch (e) {
-    useLocal = true;
-  }
-} else {
-  useLocal = true;
+function getDbUrl() {
+  return (process.env.DATABASE_URL || "").trim().replace(/^["']|["']$/g, '');
 }
+
+function getNeonClient() {
+  const dbUrl = getDbUrl();
+  if (!dbUrl || process.env.FORCE_LOCAL_DB) {
+    return null;
+  }
+  try {
+    return neon(dbUrl);
+  } catch (err) {
+    console.error("Failed to initialize Neon client:", err.message);
+    return null;
+  }
+}
+
+let localDb = null;
 
 async function getLocalDb() {
   if (localDb) return localDb;
@@ -29,30 +34,6 @@ async function getLocalDb() {
     const dbPath = path.resolve(__dirname, "../database.sqlite");
 
     localDb = new sqlite3.Database(dbPath);
-    localDb.serialize(() => {
-      localDb.run(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          full_name TEXT NOT NULL,
-          email TEXT UNIQUE NOT NULL,
-          password TEXT,
-          google_id TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      localDb.run(`
-        CREATE TABLE IF NOT EXISTS creations (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER,
-          prompt TEXT,
-          content TEXT,
-          type TEXT,
-          google_id TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-      `);
-    });
     return localDb;
   } catch (err) {
     console.warn("Local SQLite not loaded:", err.message);
@@ -63,7 +44,7 @@ async function getLocalDb() {
 async function queryLocal(sqlText, params = []) {
   const db = await getLocalDb();
   if (!db) {
-    throw new Error("No database connected and local fallback is unavailable.");
+    throw new Error("No database connected and local SQLite fallback is unavailable on this system.");
   }
   return new Promise((resolve, reject) => {
     const trimmed = sqlText.trim();
@@ -86,16 +67,19 @@ async function queryLocal(sqlText, params = []) {
 
 // Tagged template function `sql`
 const sql = async (strings, ...values) => {
-  if (!useLocal && neonClient) {
+  const neonClient = getNeonClient();
+
+  if (neonClient) {
     try {
       return await neonClient(strings, ...values);
     } catch (neonErr) {
-      console.warn("Neon DB error, falling back to local database:", neonErr.message);
-      useLocal = true;
+      const dbUrl = getDbUrl();
+      const masked = dbUrl.replace(/:([^:@]+)@/, ':***@');
+      console.warn(`Neon DB error connecting to [${masked}]:`, neonErr.message);
     }
   }
 
-  // Construct parameterized query
+  // Construct parameterized SQLite query fallback
   let sqlText = strings[0];
   const params = [];
   for (let i = 0; i < values.length; i++) {
