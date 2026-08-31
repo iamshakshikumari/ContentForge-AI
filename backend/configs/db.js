@@ -71,16 +71,7 @@ const sql = async (strings, ...values) => {
   const neonClient = getNeonClient();
 
   if (neonClient) {
-    try {
-      return await neonClient(strings, ...values);
-    } catch (neonErr) {
-      const dbUrl = getDbUrl();
-      const masked = dbUrl.replace(/:([^:@]+)@/, (match, pwd) => {
-        if (pwd.length <= 6) return ':***@';
-        return `:${pwd.slice(0, 5)}...${pwd.slice(-3)}@`;
-      });
-      console.warn(`Neon DB error connecting with user [${masked}]:`, neonErr.message);
-    }
+    return await neonClient(strings, ...values);
   }
 
   // Construct parameterized SQLite query fallback
